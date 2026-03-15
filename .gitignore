@@ -1,0 +1,16 @@
+# Maven
+target/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Environment
+application.properties
+
+# Mac
+.DS_Store

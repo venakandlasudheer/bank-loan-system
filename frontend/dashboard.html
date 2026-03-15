@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Loan System - Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">🏦 Bank Loan System</div>
+        <div class="nav-right">
+            <span id="welcomeMsg"></span>
+            <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+
+        <!-- Apply Loan Section -->
+        <div class="card">
+            <h3>Apply for a Loan</h3>
+
+            <div id="applyError" class="error-msg" style="display:none"></div>
+            <div id="applySuccess" class="success-msg" style="display:none"></div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Loan Amount (₹)</label>
+                    <input type="number" id="amount" placeholder="e.g. 50000" />
+                </div>
+                <div class="form-group">
+                    <label>Tenure (Months)</label>
+                    <input type="number" id="tenure" placeholder="e.g. 12" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Purpose</label>
+                <input type="text" id="purpose" placeholder="e.g. Home Renovation" />
+            </div>
+
+            <button class="btn" onclick="applyLoan()">Apply Now</button>
+        </div>
+
+        <!-- My Loans Section -->
+        <div class="card">
+            <h3>My Loan Applications</h3>
+            <button class="btn btn-secondary" onclick="loadMyLoans()">Refresh</button>
+            <div id="loansTable" class="table-container">
+                <p class="loading">Loading...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const username = localStorage.getItem('username');
+
+        if (!token) window.location.href = 'index.html';
+
+        document.getElementById('welcomeMsg').textContent = 'Welcome, ' + username;
+
+        window.onload = loadMyLoans;
+
+        async function applyLoan() {
+            const amount = document.getElementById('amount').value;
+            const tenure = document.getElementById('tenure').value;
+            const purpose = document.getElementById('purpose').value;
+
+            if (!amount || !tenure || !purpose) {
+                showApplyError('Please fill all fields');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8081/api/loans/apply', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        amount: parseFloat(amount),
+                        tenure: parseInt(tenure),
+                        purpose
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('applySuccess').textContent = 'Loan applied successfully!';
+                    document.getElementById('applySuccess').style.display = 'block';
+                    document.getElementById('applyError').style.display = 'none';
+                    document.getElementById('amount').value = '';
+                    document.getElementById('tenure').value = '';
+                    document.getElementById('purpose').value = '';
+                    loadMyLoans();
+                } else {
+                    showApplyError('Failed to apply for loan!');
+                }
+            } catch (error) {
+                showApplyError('Cannot connect to server!');
+            }
+        }
+
+        async function loadMyLoans() {
+            try {
+                const response = await fetch('http://localhost:8081/api/loans/my-loans', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                const loans = await response.json();
+                renderLoans(loans);
+            } catch (error) {
+                document.getElementById('loansTable').innerHTML = '<p class="error-msg">Failed to load loans!</p>';
+            }
+        }
+
+        function renderLoans(loans) {
+            if (loans.length === 0) {
+                document.getElementById('loansTable').innerHTML = '<p class="loading">No loan applications yet.</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Amount</th>
+                            <th>Purpose</th>
+                            <th>Tenure</th>
+                            <th>Status</th>
+                            <th>Applied On</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            loans.forEach(loan => {
+                html += `
+                    <tr>
+                        <td>${loan.id}</td>
+                        <td>₹${loan.amount.toLocaleString()}</td>
+                        <td>${loan.purpose}</td>
+                        <td>${loan.tenure} months</td>
+                        <td><span class="badge badge-${loan.status.toLowerCase()}">${loan.status}</span></td>
+                        <td>${new Date(loan.appliedAt).toLocaleDateString()}</td>
+                        <td>${loan.adminRemarks || '-'}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('loansTable').innerHTML = html;
+        }
+
+        function showApplyError(msg) {
+            document.getElementById('applyError').textContent = msg;
+            document.getElementById('applyError').style.display = 'block';
+            document.getElementById('applySuccess').style.display = 'none';
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

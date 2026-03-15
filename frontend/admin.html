@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Loan System - Admin</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">🏦 Bank Loan System</div>
+        <div class="nav-right">
+            <span class="admin-badge">ADMIN</span>
+            <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+
+        <!-- Stats Section -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-number" id="totalCount">0</div>
+                <div class="stat-label">Total Applications</div>
+            </div>
+            <div class="stat-card pending">
+                <div class="stat-number" id="pendingCount">0</div>
+                <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-card approved">
+                <div class="stat-number" id="approvedCount">0</div>
+                <div class="stat-label">Approved</div>
+            </div>
+            <div class="stat-card rejected">
+                <div class="stat-number" id="rejectedCount">0</div>
+                <div class="stat-label">Rejected</div>
+            </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="card">
+            <h3>All Loan Applications</h3>
+            <div class="filter-row">
+                <button class="btn btn-small" onclick="loadLoans('ALL')">All</button>
+                <button class="btn btn-small btn-warning" onclick="loadLoans('PENDING')">Pending</button>
+                <button class="btn btn-small btn-success" onclick="loadLoans('APPROVED')">Approved</button>
+                <button class="btn btn-small btn-danger" onclick="loadLoans('REJECTED')">Rejected</button>
+            </div>
+
+            <div id="loansTable" class="table-container">
+                <p class="loading">Loading...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Update Modal -->
+    <div id="modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <h3>Update Loan Status</h3>
+            <p id="modalLoanInfo"></p>
+
+            <div class="form-group">
+                <label>Status</label>
+                <select id="modalStatus">
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="REJECTED">REJECTED</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Remarks</label>
+                <input type="text" id="modalRemarks" placeholder="Enter remarks" />
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn" onclick="updateLoan()">Update</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+
+        if (!token || role !== 'ROLE_ADMIN') window.location.href = 'index.html';
+
+        let currentLoanId = null;
+
+        window.onload = () => loadLoans('ALL');
+
+        async function loadLoans(filter) {
+            try {
+                let url = 'http://localhost:8081/api/loans/admin/all';
+                if (filter !== 'ALL') {
+                    url = `http://localhost:8081/api/loans/admin/status/${filter}`;
+                }
+
+                const response = await fetch(url, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                const loans = await response.json();
+                updateStats(loans, filter);
+                renderLoans(loans);
+            } catch (error) {
+                document.getElementById('loansTable').innerHTML = '<p class="error-msg">Failed to load loans!</p>';
+            }
+        }
+
+        function updateStats(loans, filter) {
+            if (filter === 'ALL') {
+                document.getElementById('totalCount').textContent = loans.length;
+                document.getElementById('pendingCount').textContent = loans.filter(l => l.status === 'PENDING').length;
+                document.getElementById('approvedCount').textContent = loans.filter(l => l.status === 'APPROVED').length;
+                document.getElementById('rejectedCount').textContent = loans.filter(l => l.status === 'REJECTED').length;
+            }
+        }
+
+        function renderLoans(loans) {
+            if (loans.length === 0) {
+                document.getElementById('loansTable').innerHTML = '<p class="loading">No applications found.</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Username</th>
+                            <th>Amount</th>
+                            <th>Purpose</th>
+                            <th>Tenure</th>
+                            <th>Status</th>
+                            <th>Applied On</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            loans.forEach(loan => {
+                html += `
+                    <tr>
+                        <td>${loan.id}</td>
+                        <td>${loan.username}</td>
+                        <td>₹${loan.amount.toLocaleString()}</td>
+                        <td>${loan.purpose}</td>
+                        <td>${loan.tenure} months</td>
+                        <td><span class="badge badge-${loan.status.toLowerCase()}">${loan.status}</span></td>
+                        <td>${new Date(loan.appliedAt).toLocaleDateString()}</td>
+                        <td>
+                            ${loan.status === 'PENDING' ?
+                                `<button class="btn btn-small" onclick="openModal(${loan.id}, '${loan.username}', ${loan.amount})">Review</button>`
+                                : '-'
+                            }
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('loansTable').innerHTML = html;
+        }
+
+        function openModal(id, username, amount) {
+            currentLoanId = id;
+            document.getElementById('modalLoanInfo').textContent =
+                `Loan #${id} - ${username} applied for ₹${amount.toLocaleString()}`;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+            currentLoanId = null;
+        }
+
+        async function updateLoan() {
+            const status = document.getElementById('modalStatus').value;
+            const adminRemarks = document.getElementById('modalRemarks').value;
+
+            try {
+                const response = await fetch(`http://localhost:8081/api/loans/admin/update/${currentLoanId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ status, adminRemarks })
+                });
+
+                if (response.ok) {
+                    closeModal();
+                    loadLoans('ALL');
+                }
+            } catch (error) {
+                alert('Failed to update loan!');
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
